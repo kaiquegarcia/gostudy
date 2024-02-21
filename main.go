@@ -28,7 +28,7 @@ func main() {
 	var startDate time.Time
 	if len(os.Args) > 1 {
 		logger.Debug("prepare to parse date from os.Args[1]")
-		d, err := time.Parse(time.RFC3339, os.Args[1])
+		d, err := time.Parse(gostudy.LayoutDateOnly, os.Args[1])
 		if err != nil {
 			logger.Error(err, "could not parse os.Args[1]")
 			return
