@@ -1,0 +1,6 @@
+.vscode/
+vendor/
+planner.csv
+hour_grade.csv
+disciplines.csv
+test_*.csv
