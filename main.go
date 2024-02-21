@@ -111,10 +111,10 @@ func main() {
 	}
 
 	logger.Debug("all disciplines contents extracted successfully, initializing planner")
-	planner := gostudy.NewPlanner(hourGrade, disciplines, startDate)
+	planner := gostudy.NewPlanner(logger, hourGrade, disciplines, startDate)
 
 	logger.Debug("preparing to mount planner")
-	err = planner.Mount(logger)
+	err = planner.Mount()
 	if err != nil {
 		logger.Error(err, "could not mount planner")
 		return

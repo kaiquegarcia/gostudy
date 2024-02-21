@@ -6,6 +6,7 @@ type Content struct {
 	Title     string
 	Duration  time.Duration
 	Reference string
+	Attempts  int
 }
 
 func (c *Content) IsBetween(start time.Time, end time.Time) bool {

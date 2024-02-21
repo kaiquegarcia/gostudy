@@ -58,6 +58,7 @@ func (hg HourGrade) HasGradeFor(date time.Time) bool {
 }
 
 func (hg HourGrade) NextDate(from time.Time) (time.Time, error) {
+	// clone to be able to check if we come back to the same weekday
 	date := from.Add(0)
 	for {
 		date = date.AddDate(0, 0, 1)

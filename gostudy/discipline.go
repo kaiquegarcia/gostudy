@@ -133,6 +133,7 @@ func ExtractDisciplineContentFromTableRecords(
 			Title:     columns[1],
 			Duration:  duration,
 			Reference: columns[3],
+			Attempts:  0,
 		})
 	}
 
