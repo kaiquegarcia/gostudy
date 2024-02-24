@@ -1,4 +1,4 @@
-package gostudy
+package planner
 
 import (
 	"sort"
@@ -96,7 +96,7 @@ func (hg HourGrade) IntervalsFor(date time.Time) ([]*HourGradeInterval, error) {
 	return intervals, nil
 }
 
-func ExtractHourGradeFromTableRecords(records [][]string) (HourGrade, error) {
+func NewHourGradeFromRow(records [][]string) (HourGrade, error) {
 	if len(records) < 8 {
 		return nil, ErrUnexpectedGradeLength
 	}

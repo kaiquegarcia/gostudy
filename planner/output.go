@@ -1,19 +1,18 @@
-package gostudy
+package planner
 
 import "time"
 
-type PlannerOutput struct {
+type Output struct {
 	Time       time.Time
 	Discipline *Discipline
-	Subject    *Subject
 	Content    *Content
 }
 
-func (po PlannerOutput) ToRecord() []string {
+func (po Output) ToRecord() []string {
 	return []string{
 		po.Time.Format(time.RFC3339),
 		po.Discipline.Name,
-		po.Subject.Name,
+		po.Content.Subject,
 		po.Content.Title,
 		po.Content.Reference,
 		po.Content.Duration.String(),

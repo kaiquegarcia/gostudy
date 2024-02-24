@@ -1,15 +1,15 @@
-package gostudy_test
+package planner_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/kaiquegarcia/gostudy/gostudy"
+	"github.com/kaiquegarcia/gostudy/v2/planner"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_Content(t *testing.T) {
-	content := &gostudy.Content{
+	content := &planner.Content{
 		Duration: 30 * time.Minute,
 	}
 

@@ -1,30 +1,43 @@
-package gostudy
+package planner
 
 import (
+	"encoding/csv"
+	"os"
 	"time"
 
-	"github.com/kaiquegarcia/gostudy/utils"
+	"github.com/kaiquegarcia/gostudy/v2/logging"
+	"github.com/kaiquegarcia/gostudy/v2/stream"
 )
 
-type Planner struct {
+type Maker struct {
+	outputFile                   *os.File
+	outputWriter                 *csv.Writer
 	hg                           HourGrade
 	disciplines                  []*Discipline
 	inputedStartDate             time.Time
-	logger                       utils.Logger
+	logger                       logging.Logger
 	checkedDisciplinesCount      int
 	currentDisciplineIndex       int
 	currentDayDisciplineDuration time.Duration
 	finishedDisciplinesIndexes   []int
-	output                       []PlannerOutput
 }
 
-func NewPlanner(
-	logger utils.Logger,
+func NewMaker(
+	logger logging.Logger,
 	hg HourGrade,
 	data []*Discipline,
 	startDate time.Time,
-) *Planner {
-	return &Planner{
+	outputFilename string,
+) (*Maker, error) {
+	file, err := os.Create(outputFilename)
+	if err != nil {
+		return nil, err
+	}
+
+	cw := csv.NewWriter(file)
+	cw.Write([]string{"Datetime", "Discipline", "Subject", "Title", "Reference", "Duration"})
+	cw.Flush()
+	return &Maker{
 		hg:                         hg,
 		disciplines:                data,
 		inputedStartDate:           startDate,
@@ -32,19 +45,28 @@ func NewPlanner(
 		currentDisciplineIndex:     -1,
 		checkedDisciplinesCount:    0,
 		finishedDisciplinesIndexes: make([]int, 0),
-		output:                     make([]PlannerOutput, 0),
+		outputFile:                 file,
+		outputWriter:               cw,
+	}, nil
+}
+
+func (p *Maker) Close() {
+	p.outputWriter.Flush()
+	p.outputFile.Close()
+	for _, d := range p.disciplines {
+		d.Close()
 	}
 }
 
-func (p *Planner) hasExploredAllDisciplines() bool {
+func (p *Maker) hasExploredAllDisciplines() bool {
 	return p.checkedDisciplinesCount >= len(p.disciplines)
 }
 
-func (p *Planner) isAllDisciplinesFinished() bool {
+func (p *Maker) isAllDisciplinesFinished() bool {
 	return len(p.finishedDisciplinesIndexes) == len(p.disciplines)
 }
 
-func (p *Planner) isDisciplineFinished(disciplineIndex int) bool {
+func (p *Maker) isDisciplineFinished(disciplineIndex int) bool {
 	for _, index := range p.finishedDisciplinesIndexes {
 		if index == disciplineIndex {
 			return true
@@ -54,7 +76,7 @@ func (p *Planner) isDisciplineFinished(disciplineIndex int) bool {
 	return false
 }
 
-func (p *Planner) nextDiscipline(hgi *HourGradeInterval) {
+func (p *Maker) nextDiscipline(hgi *HourGradeInterval) {
 	if p.currentDayDisciplineDuration > 0 {
 		gap := p.disciplines[p.currentDisciplineIndex].SubjectGap
 		p.logger.Debug("discipline has duration > 0, adding subject gap of %s", gap)
@@ -67,7 +89,7 @@ func (p *Planner) nextDiscipline(hgi *HourGradeInterval) {
 	p.checkedDisciplinesCount++
 }
 
-func (p *Planner) startDate() (time.Time, error) {
+func (p *Maker) startDate() (time.Time, error) {
 	if !p.hg.HasGradeFor(p.inputedStartDate) {
 		p.logger.Debug("start date doesn't have hour on the grade, getting next date")
 		date, err := p.hg.NextDate(p.inputedStartDate)
@@ -87,18 +109,17 @@ func (p *Planner) startDate() (time.Time, error) {
 	return p.inputedStartDate, nil
 }
 
-func (p *Planner) Mount() error {
+func (p *Maker) Mount() error {
 	date, err := p.startDate()
 	if err != nil {
 		return err
 	}
 
-	p.output = make([]PlannerOutput, 0)
 	p.currentDisciplineIndex = 0
 	p.logger.Debug("starting mount loop")
 	for {
 		err = p.mountDate(date)
-		if err == ErrEndOfList {
+		if err == stream.ErrEOF {
 			break
 		}
 
@@ -117,14 +138,4 @@ func (p *Planner) Mount() error {
 	}
 
 	return nil
-}
-
-func (p *Planner) ResultRecords() [][]string {
-	records := make([][]string, len(p.output)+1)
-	records[0] = []string{"Datetime", "Discipline", "Subject", "Title", "Reference", "Duration"}
-	for index, plannerOutput := range p.output {
-		records[index+1] = plannerOutput.ToRecord()
-	}
-
-	return records
 }

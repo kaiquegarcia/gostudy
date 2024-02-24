@@ -41,15 +41,13 @@ func NewCSVDataStream(file *os.File) (DataStream, error) {
 }
 
 type csvDataStream struct {
-	file        *os.File
-	previous    int64
-	readed      int64
-	next        int64
-	size        int64
-	buffer      []byte
-	bufferIndex int
-	bufferSize  int
-	ended       bool
+	file     *os.File
+	previous int64
+	readed   int64
+	next     int64
+	size     int64
+	buffer   []byte
+	ended    bool
 }
 
 func (cds *csvDataStream) Read() ([]string, error) {
@@ -64,6 +62,10 @@ func (cds *csvDataStream) Read() ([]string, error) {
 		columns[i] = strings.TrimSpace(c)
 	}
 
+	if len(columns) == 1 && columns[0] == "" {
+		return nil, ErrEOF
+	}
+
 	return columns, nil
 }
 
@@ -72,49 +74,42 @@ func (cds *csvDataStream) readLine() (string, error) {
 		return "", ErrEOF
 	}
 
-	currentRow := ""
+	phrase := ""
+	cds.readed = 0
 	for {
-		cds.readed = 0
-		for index := cds.bufferIndex; index < cds.bufferSize && index < len(cds.buffer); index++ {
-			cds.bufferIndex++
-			b := cds.buffer[index]
-			isBreakLine := b == '\n'
-			if isBreakLine && currentRow == "" {
-				cds.readed++
-				continue
-			}
-
-			if isBreakLine {
+		for index, b := range cds.buffer {
+			if b == '\n' && phrase != "" {
 				cds.previous = cds.next
-				cds.next += int64(index)
-				fmt.Println("row = '", currentRow, "', previous=", cds.previous, ", next=", cds.next, ", index=", index)
-				cds.bufferSize -= index
-				cds.bufferIndex = 0
+				cds.next += cds.readed
 				cds.buffer = cds.buffer[index:]
 				if cds.previous == cds.next {
 					cds.ended = true
 				}
-				return currentRow, nil
+
+				return phrase, nil
 			}
 
-			currentRow += string(b)
+			phrase += string(b)
 			cds.readed++
+		}
+
+		if cds.next+cds.readed >= cds.size {
+			cds.ended = true
+			return phrase, nil
 		}
 
 		buffer := make([]byte, bufferSize)
 		readed, err := cds.file.ReadAt(buffer, cds.next+cds.readed)
 		if errors.Is(io.EOF, err) && readed == 0 {
 			cds.ended = true
-			return currentRow, nil
+			return phrase, nil
 		}
 
 		if err != nil && !errors.Is(io.EOF, err) {
 			return "", err
 		}
 
-		cds.bufferIndex = 0
-		cds.bufferSize = readed
-		cds.buffer = buffer
+		cds.buffer = buffer[:readed]
 	}
 }
 

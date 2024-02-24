@@ -2,18 +2,18 @@ package main
 
 import (
 	"os"
-	"sync"
 	"time"
 
-	"github.com/kaiquegarcia/gostudy/gostudy"
-	"github.com/kaiquegarcia/gostudy/utils"
+	"github.com/kaiquegarcia/gostudy/v2/logging"
+	"github.com/kaiquegarcia/gostudy/v2/planner"
+	"github.com/kaiquegarcia/gostudy/v2/utils"
 )
 
 func main() {
 	// dependencies
-	logger := utils.NewLogger(
-		utils.DefaultPrinter,
-		utils.LevelDebug,
+	logger := logging.NewLogger(
+		logging.DefaultPrinter,
+		logging.LevelDebug,
 	)
 
 	defer utils.PanicHandler(logger)
@@ -21,14 +21,14 @@ func main() {
 	reqFilenames := utils.RequiredFilenames{
 		HourGrade:       "hour_grade.csv",
 		DisciplinesList: "disciplines.csv",
-		PlannerOutput:   "planner.csv",
+		Output:          "planner.csv",
 	}
 
 	// run
 	var startDate time.Time
 	if len(os.Args) > 1 {
 		logger.Debug("prepare to parse date from os.Args[1]")
-		d, err := time.Parse(gostudy.LayoutDateOnly, os.Args[1])
+		d, err := time.Parse(planner.LayoutDateOnly, os.Args[1])
 		if err != nil {
 			logger.Error(err, "could not parse os.Args[1]")
 			return
@@ -49,7 +49,7 @@ func main() {
 	}
 
 	logger.Debug("'%s' readed successfuly, preparing to extract information from records", reqFilenames.HourGrade)
-	hourGrade, err := gostudy.ExtractHourGradeFromTableRecords(hourGradeRecords)
+	hourGrade, err := planner.NewHourGradeFromRow(hourGradeRecords)
 	if err != nil {
 		logger.Error(err, "could not extract hour grade from table records")
 		return
@@ -64,72 +64,38 @@ func main() {
 	}
 
 	logger.Debug("'%s' readed successfuly, preparing to extract information from records", reqFilenames.DisciplinesList)
-	disciplines, err := gostudy.ExtractDisciplineListFromTableRecords(disciplineRecords)
+	disciplines, err := planner.NewDisciplineFromRows(disciplineRecords)
 	if err != nil {
 		logger.Error(err, "could not extract disciplines list from table records")
 		return
 	}
 
-	logger.Debug("disciplines list data extracted successfuly, preparing to read disciplines content files (%d disciplines)", len(disciplines))
-	wg := &sync.WaitGroup{}
-	wg.Add(len(disciplines))
-	hadErrors := false
-	for _, d := range disciplines {
-		go func(discipline *gostudy.Discipline) {
-			logger.Debug("reading '%s'", discipline.Filename)
-			contentRecords, err := utils.ReadCSV(discipline.Filename)
-			if err != nil {
-				logger.Error(err, "could not read '%s'", discipline.Filename)
-				hadErrors = true
-				wg.Done()
-				return
-			}
+	makerReady := false
+	defer func() {
+		if makerReady {
+			return
+		}
+		// fallback if something go wrong before initializing maker
+		for _, d := range disciplines {
+			d.Close()
+		}
+	}()
 
-			// if any other goroutine had errors before this
-			if hadErrors {
-				wg.Done()
-				return
-			}
-
-			logger.Debug("'%s' readed successfuly, preparing to extract information from records", discipline.Filename)
-			err = gostudy.ExtractDisciplineContentFromTableRecords(discipline, contentRecords)
-			if err != nil {
-				logger.Error(err, "could not extract '%s's content from table records", discipline.Name)
-				hadErrors = true
-				wg.Done()
-				return
-			}
-
-			logger.Debug("'%s's content extracted from table records successfully", discipline.Name)
-			wg.Done()
-		}(d)
-	}
-	wg.Wait()
-	if hadErrors {
-		logger.Warn("one or more discipline's goroutines had errors, check the unordered logs to discover what happened")
+	logger.Debug("disciplines list data extracted successfuly, initializing planner maker")
+	maker, err := planner.NewMaker(logger, hourGrade, disciplines, startDate, reqFilenames.Output)
+	if err != nil {
+		logger.Error(err, "could not initialize planner maker")
 		return
 	}
-
-	logger.Debug("all disciplines contents extracted successfully, initializing planner")
-	planner := gostudy.NewPlanner(logger, hourGrade, disciplines, startDate)
+	defer maker.Close()
+	makerReady = true
 
 	logger.Debug("preparing to mount planner")
-	err = planner.Mount()
+	err = maker.Mount()
 	if err != nil {
 		logger.Error(err, "could not mount planner")
 		return
 	}
 
-	logger.Debug("planner mounted successfully, retrieving result records")
-	plannerRecords := planner.ResultRecords()
-
-	logger.Debug("result records retrieved successfully, writing '%s'", reqFilenames.PlannerOutput)
-	err = utils.WriteCSV(reqFilenames.PlannerOutput, plannerRecords)
-	if err != nil {
-		logger.Error(err, "could not write '%s'", reqFilenames.PlannerOutput)
-		return
-	}
-
-	logger.Debug("'%s' written successfully", reqFilenames.PlannerOutput)
-	logger.Info("procedure finished successfully")
+	logger.Debug("planner mounted successfully")
 }

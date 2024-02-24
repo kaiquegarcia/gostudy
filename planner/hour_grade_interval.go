@@ -1,4 +1,4 @@
-package gostudy
+package planner
 
 import (
 	"fmt"

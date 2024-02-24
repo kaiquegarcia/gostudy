@@ -1,4 +1,4 @@
-module github.com/kaiquegarcia/gostudy
+module github.com/kaiquegarcia/gostudy/v2
 
 go 1.20
 

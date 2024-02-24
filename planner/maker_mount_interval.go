@@ -1,14 +1,18 @@
-package gostudy
+package planner
 
-import "time"
+import (
+	"time"
 
-func (p *Planner) mountInterval(hgi *HourGradeInterval) error {
+	"github.com/kaiquegarcia/gostudy/v2/stream"
+)
+
+func (p *Maker) mountInterval(hgi *HourGradeInterval) error {
 	initialStr := hgi.Start.Format(LayoutTimeOnly)
 	endStr := hgi.End.Format(LayoutTimeOnly)
 	p.logger.Debug("starting procedure for interval %s-%s", initialStr, endStr)
 	var (
 		previousDiscipline *Discipline
-		previousSubject    *Subject
+		previousSubject    string
 		isFirst            = true
 	)
 	p.checkedDisciplinesCount = 0
@@ -53,14 +57,15 @@ func (p *Planner) mountInterval(hgi *HourGradeInterval) error {
 		}
 
 		p.logger.Debug("discipline '%s' did not exhaust daily limit, checking next content", discipline.Name)
-		content, subject, err := discipline.Next()
-		if err == ErrEndOfList {
+		content, err := discipline.Next()
+		if err == stream.ErrEOF {
 			p.logger.Debug("discipline '%s' reached the end of content list, checking if all disciplines finished", discipline.Name)
 			p.finishedDisciplinesIndexes = append(p.finishedDisciplinesIndexes, p.currentDisciplineIndex)
 
 			if p.isAllDisciplinesFinished() {
 				p.logger.Debug("all disciplines finished, ending planner mount! last discipline = %s", discipline.Name)
-				return ErrEndOfList
+				p.outputWriter.Flush()
+				return stream.ErrEOF
 			}
 
 			p.logger.Debug("still have disciplines to work on. getting next discipline, adding gap only if current duration is higher than zero")
@@ -79,11 +84,11 @@ func (p *Planner) mountInterval(hgi *HourGradeInterval) error {
 		if isFirst {
 			p.logger.Debug("it's the first content of this time interval, no gap is required")
 			preGap = 0
-		} else if subject != previousSubject && previousSubject != nil && previousDiscipline == discipline {
+		} else if content.Subject != previousSubject && previousSubject != "" && previousDiscipline == discipline {
 			totalDuration += discipline.SubjectGap
 			preGap = discipline.SubjectGap
 			p.logger.Debug("it's a new subject of the same discipline, adding gap of %s", preGap)
-		} else if subject == previousSubject {
+		} else if content.Subject == previousSubject {
 			totalDuration += discipline.ContentGap
 			preGap = discipline.ContentGap
 			p.logger.Debug("it's a new content of the same subject, adding gap of %s", preGap)
@@ -125,20 +130,27 @@ func (p *Planner) mountInterval(hgi *HourGradeInterval) error {
 		}
 
 		p.logger.Debug("content can be added to time interval, adding to PlannerOutput list")
-		p.output = append(p.output, PlannerOutput{
+
+		output := Output{
 			Time:       hgi.Start.Add(preGap),
 			Discipline: discipline,
-			Subject:    subject,
 			Content:    content,
-		})
+		}
 
-		previousSubject = subject
+		err = p.outputWriter.Write(output.ToRecord())
+		if err != nil {
+			return err
+		}
+
+		previousSubject = content.Subject
 		previousDiscipline = discipline
 		p.currentDayDisciplineDuration += totalDuration
 		hgi.Start = hgi.Start.Add(totalDuration)
 		isFirst = false
 		p.logger.Debug("inner loop %d finished, starting next", loopCounter)
 	}
+
+	p.outputWriter.Flush()
 
 	p.logger.Debug("procedure for interval  %s-%s finished, calling next interval", initialStr, endStr)
 	return nil

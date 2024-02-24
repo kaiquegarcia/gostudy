@@ -1,15 +1,12 @@
-package utils
+package planner
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
 
-var ErrInvalidDurationFormat = fmt.Errorf("the duration doesn't follow the hh:mm:ss pattern")
-
-func ParseDuration(duration string) (time.Duration, error) {
+func parseDuration(duration string) (time.Duration, error) {
 	pieces := strings.Split(duration, ":")
 	if len(pieces) != 3 {
 		return 0, ErrInvalidDurationFormat

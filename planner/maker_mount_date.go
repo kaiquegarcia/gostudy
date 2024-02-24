@@ -1,8 +1,8 @@
-package gostudy
+package planner
 
 import "time"
 
-func (p *Planner) mountDate(date time.Time) error {
+func (p *Maker) mountDate(date time.Time) error {
 	dateStr := date.Format(LayoutDateOnly)
 	p.logger.Debug("retrieving time intervals for date %s", dateStr)
 	intervals, err := p.hg.IntervalsFor(date)
